@@ -96,9 +96,9 @@ jobs:
           LLNEXTGEN_VERSION=0.5.5
           INSTALL_DIR="$RUNNER_TEMP/llnextgen-install"
           curl -fsSL \
-            "https://os.ghalkes.nl/dist/LLnextgen-${LLNEXTGEN_VERSION}.tar.bz2" \
-            -o llnextgen.tar.bz2
-          tar xjf llnextgen.tar.bz2
+            "https://os.ghalkes.nl/LLnextgen/releases/LLnextgen-${LLNEXTGEN_VERSION}.tgz" \
+            -o llnextgen.tgz
+          tar xzf llnextgen.tgz
           cd "LLnextgen-${LLNEXTGEN_VERSION}"
           ./configure --prefix="${INSTALL_DIR}"
           make
