@@ -97,6 +97,34 @@ int copy_file_by_ficlone(int src_fd, int dest_fd) {
 int copy_file_by_ficlone(int, int) { return ENOTSUP; }
 #endif
 
+#if defined(HAS_COPYFILE)
+#include <copyfile.h>
+
+int copy_file_by_copyfile(int src_fd, int dest_fd) {
+  if (!rewind_files(src_fd, dest_fd)) {
+    return errno;
+  }
+  copyfile_state_t cp_state = copyfile_state_alloc();
+  if (!cp_state) {
+    return ENOMEM;
+  }
+  if (copyfile_state_set(cp_state, COPYFILE_STATE_SRC_FD, &src_fd) < 0 ||
+      copyfile_state_set(cp_state, COPYFILE_STATE_DST_FD, &dest_fd) < 0) {
+    int err = errno;
+    copyfile_state_free(cp_state);
+    return err;
+  }
+  int result = 0;
+  if (copyfile(nullptr, nullptr, cp_state, COPYFILE_DATA) < 0) {
+    result = errno;
+  }
+  copyfile_state_free(cp_state);
+  return result;
+}
+#else
+int copy_file_by_copyfile(int, int) { return ENOTSUP; }
+#endif
+
 int copy_file_by_read_write(int src_fd, int dest_fd) {
   if (!rewind_files(src_fd, dest_fd)) {
     return errno;
@@ -136,6 +164,10 @@ int copy_file(int src_fd, int dest_fd) {
     return result;
   }
   result = copy_file_by_sendfile(src_fd, dest_fd, statbuf.st_size);
+  if (result != ENOTSUP && result != ENOSYS) {
+    return result;
+  }
+  result = copy_file_by_copyfile(src_fd, dest_fd);
   if (result != ENOTSUP && result != ENOSYS) {
     return result;
   }

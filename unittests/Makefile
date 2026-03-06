@@ -34,9 +34,15 @@ LDFLAGS += $(T3LDFLAGS.t3widget)
 LDFLAGS += -pthread
 
 CXXFLAGS += -DTILDE_UNITTEST
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+# macOS does not support these Linux-specific system calls
+CXXFLAGS += -DHAS_COPYFILE
+else
 CXXFLAGS += -DHAS_SENDFILE
 CXXFLAGS += -DHAS_COPY_FILE_RANGE
 CXXFLAGS += -DHAS_FICLONE
+endif
 CXXFLAGS += -std=c++11
 CXXFLAGS += -pthread
 CXXFLAGS += -I$(GTEST_DIR)/include

@@ -58,6 +58,14 @@ follow the steps below to build Tilde from the git repositories:
    * pkg-config
    * LLnextgen (available [here](https://os.ghalkes.nl/LLnextgen/download.html))
    * clang (unless building using COMPILER=gcc)
+
+   On macOS, install dependencies via [Homebrew](https://brew.sh):
+   ```bash
+   brew install flex gettext ncurses pcre2 libunistring pkg-config libtool
+   ```
+   Note: `libgpm-dev`, `libacl1-dev`, `libattr1-dev` are Linux-only and not
+   required on macOS. LLnextgen must still be built from source.
+
 2. Clone the repositories:
 ```bash
 for i in makesys transcript t3shared t3window t3widget t3key t3config t3highlight tilde ; do

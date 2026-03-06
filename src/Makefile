@@ -51,18 +51,24 @@ CXXFLAGS.openfiles = -I.objects
 
 CXXFLAGS += -DTILDE_DEBUG
 CXXFLAGS += -DHAS_STRDUP
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+# macOS does not support these Linux-specific system calls
+CXXFLAGS += -DHAS_COPYFILE
+else
 CXXFLAGS += -DHAS_POSIX_FALLOCATE
 CXXFLAGS += -DHAS_SENDFILE
 CXXFLAGS += -DHAS_COPY_FILE_RANGE
 CXXFLAGS += -DHAS_FICLONE
+endif
 #~ CXXFLAGS += -DUSE_GETTEXT -DLOCALEDIR=\"locales\"
 CXXFLAGS += -std=c++11
 CXXFLAGS += -DCXX11SWITCH=1
 CXXFLAGS += -DDATADIR='"$(CURDIR)"'
 
 clean-logs:
-	@if [ -d .recordings ] ; then find .recordings/ -name "record-*" -mtime +7 | xargs -r rm ; fi
-	@if [ -d .recordings ] ; then find .recordings/ -name "record-*" -mtime +1 | egrep -v '\.bz2$$' | xargs -r bzip2 -9 || true ; fi
+	@if [ -d .recordings ] ; then find .recordings/ -name "record-*" -mtime +7 -exec rm {} + 2>/dev/null || true ; fi
+	@if [ -d .recordings ] ; then find .recordings/ -name "record-*" -mtime +1 ! -name "*.bz2" -exec bzip2 -9 {} + 2>/dev/null || true ; fi
 
 linecount:
 	@echo "WARNING: this doesn't count the header files, only .c files!"
@@ -71,7 +77,7 @@ linecount:
 	@if [ `which c_count 2>/dev/null` ] ; then echo "Linecounts as reported by the SLOCCount utilities" ; c_count $(CXXFILES) ; fi
 
 xgettext: all
-	xgettext -k_ -kN_ --add-comments=TRANSLATORS -o ../po/messages.pot `cat $$(find .deps -type f) | sed -r 's/^.+://;s/\\\\//g'`
+	xgettext -k_ -kN_ --add-comments=TRANSLATORS -o ../po/messages.pot `cat $$(find .deps -type f) | sed -E 's/^.+://;s/\\\\//g'`
 
 .objects/%.bytes: %.schema
 	$(GENOBJDIR)

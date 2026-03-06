@@ -36,7 +36,9 @@ static int (*real_rename)(const char *oldpath, const char *newpath);
 static int (*real_link)(const char *oldpath, const char *newpath);
 static int (*real_unlink)(const char *pathname);
 static int (*real_mkstemp)(char *template);
+#if !defined(__APPLE__)
 static int (*real___xstat)(int ver, const char *path, struct stat *buf);
+#endif
 static int (*real_creat)(const char *name, mode_t mode);
 static int (*real_access)(const char *name, int mode);
 
@@ -80,6 +82,11 @@ static char *safe_strdup(const char *str) {
 }
 
 static void *get_libc_func(const char *name) {
+#if defined(__APPLE__)
+	/* On macOS, use RTLD_NEXT to find the next occurrence of the symbol
+	   in the dynamic linker search order, skipping the current library. */
+	return dlsym(RTLD_NEXT, name);
+#else
 	static void *libc;
 
 	if (libc == NULL) {
@@ -88,6 +95,7 @@ static void *get_libc_func(const char *name) {
 	}
 
 	return dlsym(libc, name);
+#endif
 }
 
 static void init_base_dir(void) {
@@ -197,6 +205,7 @@ int stat(const char *path, struct stat *buf) {
 	return result;
 }
 
+#if !defined(__APPLE__)
 int __xstat(int ver, const char *path, struct stat *buf) {
 	char *real_name;
 	int result;
@@ -206,6 +215,7 @@ int __xstat(int ver, const char *path, struct stat *buf) {
 	free(real_name);
 	return result;
 }
+#endif
 
 int rename(const char *oldpath, const char *newpath) {
 	char *real_oldname, *real_newname;
@@ -309,9 +319,14 @@ void lib_init(void) {
 	INIT_LIBC_FUNC(access, 0);
 
 	INIT_LIBC_FUNC(stat, 1);
+#if !defined(__APPLE__)
 	INIT_LIBC_FUNC(__xstat, 1);
 	if (real_stat == NULL && real___xstat == NULL)
 		FATAL("failed to get a handle for stat/__xstat\n");
+#else
+	if (real_stat == NULL)
+		FATAL("failed to get a handle for stat\n");
+#endif
 
 	init_base_dir();
 }
