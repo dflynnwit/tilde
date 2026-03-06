@@ -1,5 +1,7 @@
 # The Tilde Text Editor
 
+[![macOS Build](https://github.com/dflynnwit/tilde/actions/workflows/build-macos.yml/badge.svg)](https://github.com/dflynnwit/tilde/actions/workflows/build-macos.yml)
+
 Tilde is a text editor for the console/terminal, which provides an intuitive
 interface for people accustomed to GUI environments such as Gnome, KDE and
 Windows. For example, the short-cut to copy the current selection is Control-C,
