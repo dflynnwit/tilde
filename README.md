@@ -12,6 +12,34 @@ For more information, see [the homepage](https://os.ghalkes.nl/tilde)
 
 ## Installing Tilde
 
+### macOS pre-built binaries
+
+Pre-built macOS binaries (for both Apple Silicon and Intel Macs) are produced
+automatically by GitHub Actions on every commit and are available in two places:
+
+1. **Latest CI artifact** – go to the
+   [Actions tab](../../actions/workflows/build-macos.yml), click the most
+   recent successful run, then download the artifact for your architecture
+   (`tilde-macos-arm64` for Apple Silicon, `tilde-macos-x86_64` for Intel).
+
+2. **Tagged releases** – when a version tag (`v*`) is pushed, the binaries are
+   attached automatically to the corresponding
+   [GitHub Release](../../releases).
+
+After downloading and extracting the tar.gz, install the required runtime
+libraries and run tilde:
+
+```bash
+# Install runtime libraries (one-time)
+brew install ncurses libunistring pcre2
+
+# Extract and run
+tar xzf tilde-*-macos-*.tar.gz
+./tilde-*-macos-*/tilde [file ...]
+```
+
+### Linux / other platforms
+
 The easiest way to install Tilde is by using the repositories from the Tilde
 homepage [download section](https://os.ghalkes.nl/tilde/download.html). If there
 are no binary packages provided for your distribution or hardware, you can still

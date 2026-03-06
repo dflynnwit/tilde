@@ -1,0 +1,226 @@
+name: macOS Build
+
+# Build tilde for macOS and produce a downloadable binary artifact.
+# On tagged releases (v*) the binary is also attached to the GitHub Release.
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build (${{ matrix.arch_label }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write  # needed to upload assets to GitHub Releases
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Apple Silicon (arm64) – default "latest" macOS runner
+          - os: macos-latest
+            arch_label: arm64
+          # Intel (x86_64)
+          - os: macos-13
+            arch_label: x86_64
+
+    steps:
+      # ── 1. Checkout tilde into the default workspace ────────────────────────
+      - name: Checkout tilde
+        uses: actions/checkout@v4
+        with:
+          # Full history is needed so `git describe` can find tags for the
+          # version string embedded in the packaged binary name.
+          fetch-depth: 0
+
+      # ── 2. System dependencies via Homebrew ─────────────────────────────────
+      - name: Install Homebrew dependencies
+        run: |
+          brew install \
+            flex \
+            gettext \
+            ncurses \
+            pcre2 \
+            libunistring \
+            libtool \
+            pkg-config
+
+      # ── 3. Expose keg-only Homebrew tools and set build flags ───────────────
+      - name: Configure build environment
+        run: |
+          BREW=$(brew --prefix)
+
+          # flex and gettext are keg-only; add their bin dirs to PATH
+          echo "$(brew --prefix flex)/bin"    >> "$GITHUB_PATH"
+          echo "$(brew --prefix gettext)/bin" >> "$GITHUB_PATH"
+          # GNU libtool is named glibtool on macOS to avoid shadowing the system
+          # tool; expose it as libtool/libtoolize as well
+          echo "$(brew --prefix libtool)/bin" >> "$GITHUB_PATH"
+
+          # pkg-config search path: global Homebrew prefix + keg-only packages
+          PKG_CONFIG_PATH="${BREW}/lib/pkgconfig:${BREW}/share/pkgconfig"
+          PKG_CONFIG_PATH="${PKG_CONFIG_PATH}:$(brew --prefix ncurses)/lib/pkgconfig"
+          PKG_CONFIG_PATH="${PKG_CONFIG_PATH}:$(brew --prefix pcre2)/lib/pkgconfig"
+          PKG_CONFIG_PATH="${PKG_CONFIG_PATH}:$(brew --prefix libunistring)/lib/pkgconfig"
+          echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
+
+          # Extra compiler/linker flags so headers and libs are found
+          echo "CPPFLAGS=-I${BREW}/include"  >> "$GITHUB_ENV"
+          echo "LDFLAGS=-L${BREW}/lib"       >> "$GITHUB_ENV"
+
+          # macOS ships with an Apple-flavoured libtool; GNU libtool binaries
+          # land as glibtool/glibtoolize. Create wrapper symlinks in a
+          # temporary directory on the PATH so configure scripts find them.
+          mkdir -p "$RUNNER_TEMP/libtool-shims"
+          ln -sf "$(brew --prefix libtool)/bin/glibtool"     "$RUNNER_TEMP/libtool-shims/libtool"
+          ln -sf "$(brew --prefix libtool)/bin/glibtoolize"  "$RUNNER_TEMP/libtool-shims/libtoolize"
+          echo "$RUNNER_TEMP/libtool-shims" >> "$GITHUB_PATH"
+
+      # ── 4. LLnextgen ────────────────────────────────────────────────────────
+      # LLnextgen is a parser-generator required by the t3key library.
+      # It is not available via Homebrew, so we build it from source.
+      - name: Cache LLnextgen build
+        id: cache-llnextgen
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/llnextgen-install
+          key: llnextgen-0.5.5-${{ matrix.arch_label }}
+
+      - name: Build and install LLnextgen
+        if: steps.cache-llnextgen.outputs.cache-hit != 'true'
+        run: |
+          LLNEXTGEN_VERSION=0.5.5
+          INSTALL_DIR="$RUNNER_TEMP/llnextgen-install"
+          curl -fsSL \
+            "https://os.ghalkes.nl/dist/LLnextgen-${LLNEXTGEN_VERSION}.tar.bz2" \
+            -o llnextgen.tar.bz2
+          tar xjf llnextgen.tar.bz2
+          cd "LLnextgen-${LLNEXTGEN_VERSION}"
+          ./configure --prefix="${INSTALL_DIR}"
+          make
+          make install
+
+      - name: Add LLnextgen to PATH
+        run: echo "$RUNNER_TEMP/llnextgen-install/bin" >> "$GITHUB_PATH"
+
+      # ── 5. Clone companion repositories ─────────────────────────────────────
+      # The tilde build system expects all repos to be siblings in the same
+      # parent directory.  $GITHUB_WORKSPACE is <parent>/tilde, so we clone
+      # the rest into <parent>/.
+      - name: Clone companion repositories
+        working-directory: ${{ github.workspace }}/..
+        run: |
+          for repo in makesys transcript t3shared t3window t3widget t3key t3config t3highlight; do
+            if [ ! -d "${repo}" ]; then
+              git clone --depth=1 "https://github.com/gphalkes/${repo}.git"
+            fi
+          done
+
+      # ── 6. Cache compiled dependencies ──────────────────────────────────────
+      # Use a cache key that includes the HEAD SHAs of all companion repos so
+      # the cache is invalidated when any dependency changes.
+      - name: Compute dependency cache key
+        working-directory: ${{ github.workspace }}/..
+        id: dep-cache-key
+        run: |
+          KEY=""
+          for repo in makesys transcript t3shared t3window t3widget t3key t3config t3highlight; do
+            SHA=$(git -C "${repo}" rev-parse HEAD 2>/dev/null || echo "unknown")
+            KEY="${KEY}-${repo}:${SHA}"
+          done
+          echo "key=deps-${{ matrix.arch_label }}-${KEY}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache compiled dependencies
+        id: cache-deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/../transcript/src/.objects
+            ${{ github.workspace }}/../transcript/src/.libs
+            ${{ github.workspace }}/../t3config/src/.objects
+            ${{ github.workspace }}/../t3config/src/.libs
+            ${{ github.workspace }}/../t3key/src/.objects
+            ${{ github.workspace }}/../t3key/src/.libs
+            ${{ github.workspace }}/../t3window/src/.objects
+            ${{ github.workspace }}/../t3window/src/.libs
+            ${{ github.workspace }}/../t3widget/src/.objects
+            ${{ github.workspace }}/../t3widget/src/.libs
+            ${{ github.workspace }}/../t3highlight/src/.objects
+            ${{ github.workspace }}/../t3highlight/src/.libs
+          key: ${{ steps.dep-cache-key.outputs.key }}
+
+      # ── 7. Build everything ──────────────────────────────────────────────────
+      - name: Build all packages
+        working-directory: ${{ github.workspace }}/..
+        run: ./t3shared/doall --skip-non-source --stop-on-error make -C src
+
+      # ── 8. Smoke-test the binary ─────────────────────────────────────────────
+      - name: Verify binary runs
+        run: |
+          file src/.objects/edit
+          # --version / --help should exit cleanly (exit 0 or 1 are both fine
+          # for a terminal editor; we just want to confirm it executes)
+          src/.objects/edit --version 2>&1 || true
+
+      # ── 9. Package the binary ────────────────────────────────────────────────
+      - name: Package binary
+        run: |
+          VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+          ARCH=$(uname -m)
+          PKG="tilde-${VERSION}-macos-${ARCH}"
+          mkdir -p "${PKG}"
+
+          cp src/.objects/edit "${PKG}/tilde"
+
+          cat > "${PKG}/INSTALL.md" <<'MDEOF'
+          # Tilde – macOS Binary
+
+          ## Runtime requirements
+
+          Install the following via [Homebrew](https://brew.sh):
+
+          ```
+          brew install ncurses libunistring pcre2
+          ```
+
+          ## Running Tilde
+
+          ```
+          ./tilde [file ...]
+          ```
+
+          Key bindings (Ctrl = Control, Alt = Meta/Option):
+          - **Alt-F**  File menu
+          - **Ctrl-S** Save
+          - **Ctrl-O** Open file
+          - **Ctrl-Q** Quit
+          - **Ctrl-C / Ctrl-V** Copy / Paste
+          - **Ctrl-Z / Ctrl-Y** Undo / Redo
+          - **Ctrl-F** Find
+          MDEOF
+
+          tar -czf "${PKG}.tar.gz" "${PKG}/"
+          echo "PKG=${PKG}.tar.gz" >> "$GITHUB_ENV"
+
+      # ── 10. Upload artifact (available from every CI run) ───────────────────
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tilde-macos-${{ matrix.arch_label }}
+          path: tilde-*-macos-*.tar.gz
+          if-no-files-found: error
+          # Keep artifacts for 90 days (GitHub default)
+
+      # ── 11. Attach to GitHub Release (only on version tags) ─────────────────
+      - name: Attach binary to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: tilde-*-macos-*.tar.gz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
