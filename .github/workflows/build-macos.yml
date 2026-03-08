@@ -94,6 +94,12 @@ jobs:
           cat > "${PKG}/tilde" <<'EOF'
           #!/bin/bash
           DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+          # Strip macOS Gatekeeper quarantine from all bundled files.
+          # This is required so that .ltc plugin bundles (e.g. utf8.ltc) can be
+          # dynamically loaded without Gatekeeper blocking them.
+          xattr -dr com.apple.quarantine "$DIR" 2>/dev/null
+
           export TILDE_DATADIR="$DIR/data"
           export T3KEY_DATABASE_PATH="$DIR/data/t3key"
           export TRANSCRIPT_PATH="$DIR/data/transcript"
