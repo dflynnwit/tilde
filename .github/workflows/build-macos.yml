@@ -86,68 +86,81 @@ jobs:
           ARCH=$(uname -m)
           PKG="tilde-${VERSION}-macos-${ARCH}"
           mkdir -p "${PKG}/libs"
+          mkdir -p "${PKG}/data/transcript"
+          mkdir -p "${PKG}/data/t3key"
 
-          cp src/.objects/edit "${PKG}/tilde"
+          # 1. Binary and Launcher
+          cp src/.objects/edit "${PKG}/tilde.real"
+          cat > "${PKG}/tilde" <<'EOF'
+          #!/bin/bash
+          DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+          export TILDE_DATADIR="$DIR/data"
+          export T3KEY_DATABASE_PATH="$DIR/data/t3key"
+          export TRANSCRIPT_PATH="$DIR/data/transcript"
+          # Set DYLD_LIBRARY_PATH to ensure our bundled libs are found
+          export DYLD_LIBRARY_PATH="$DIR/libs:$DYLD_LIBRARY_PATH"
+          exec "$DIR/tilde.real" "$@"
+          EOF
+          chmod +x "${PKG}/tilde"
 
-          # Bundle all 6 companion libraries
+          # 2. Bundle companion libraries
           LIBS="libtranscript libt3config libt3key libt3window libt3widget libt3highlight"
           for lib in $LIBS; do
-            # The libs have versioned names like libt3config.0.dylib
             cp ../*/src/.libs/${lib}.0.dylib "${PKG}/libs/"
           done
 
-          # Bundle shared dependencies from Homebrew to make it truly standalone
+          # 3. Bundle shared dependencies from Homebrew
           BREW=$(brew --prefix)
           cp "${BREW}/opt/libunistring/lib/libunistring.5.dylib" "${PKG}/libs/"
           cp "${BREW}/opt/pcre2/lib/libpcre2-8.0.dylib" "${PKG}/libs/"
 
-          # --- Linkage Fix Step 1: Fix the main binary's references ---
-          for libName in libtranscript.0.dylib libt3config.0.dylib libt3key.0.dylib libt3window.0.dylib libt3widget.0.dylib libt3highlight.0.dylib; do
-             install_name_tool -change "/usr/lib/${libName}" "@executable_path/libs/${libName}" "${PKG}/tilde"
-          done
+          # 4. Bundle Data Files
+          cp src/base.config "${PKG}/data/"
+          find ../transcript/src -name "*.ltc" -exec cp {} "${PKG}/data/transcript/" \;
+          cp ../t3key/src/database/* "${PKG}/data/t3key/"
 
-          # --- Linkage Fix Step 2: Fix the dylibs' OWN internal references to each other ---
+          # Ensure everything is writable for install_name_tool
+          chmod -R 755 "${PKG}"
+
+          # 5. Fix Linkage (Targeting tilde.real)
+          for libName in libtranscript.0.dylib libt3config.0.dylib libt3key.0.dylib libt3window.0.dylib libt3widget.0.dylib libt3highlight.0.dylib; do
+             install_name_tool -change "/usr/lib/${libName}" "@executable_path/libs/${libName}" "${PKG}/tilde.real"
+          done
+          
           for targetLib in "${PKG}/libs/"*.dylib; do
             for neighbor in libtranscript.0.dylib libt3config.0.dylib libt3key.0.dylib libt3window.0.dylib libt3widget.0.dylib libt3highlight.0.dylib; do
               install_name_tool -change "/usr/lib/${neighbor}" "@loader_path/${neighbor}" "${targetLib}"
             done
-            # Also fix references to the bundled Homebrew libs
             install_name_tool -change "${BREW}/opt/libunistring/lib/libunistring.5.dylib" "@loader_path/libunistring.5.dylib" "${targetLib}"
             install_name_tool -change "${BREW}/opt/pcre2/lib/libpcre2-8.0.dylib" "@loader_path/libpcre2-8.0.dylib" "${targetLib}"
-            # Ensure the dylib identifies itself by its relative path
             libBase=$(basename "$targetLib")
             install_name_tool -id "@loader_path/${libBase}" "${targetLib}"
           done
 
-          # --- Linkage Fix Step 3: Fix Homebrew refs in the main binary too ---
-          install_name_tool -change "${BREW}/opt/libunistring/lib/libunistring.5.dylib" "@executable_path/libs/libunistring.5.dylib" "${PKG}/tilde"
-          install_name_tool -change "${BREW}/opt/pcre2/lib/libpcre2-8.0.dylib" "@executable_path/libs/libpcre2-8.0.dylib" "${PKG}/tilde"
+          install_name_tool -change "${BREW}/opt/libunistring/lib/libunistring.5.dylib" "@executable_path/libs/libunistring.5.dylib" "${PKG}/tilde.real"
+          install_name_tool -change "${BREW}/opt/pcre2/lib/libpcre2-8.0.dylib" "@executable_path/libs/libpcre2-8.0.dylib" "${PKG}/tilde.real"
 
-          # Ensure we have write permissions on everything (brew libs can be read-only)
-          chmod -R 755 "${PKG}"
-
-          # Ad-hoc sign everything to satisfy macOS Gatekeeper
+          # 6. Ad-hoc sign everything
           echo "--> Applying ad-hoc signatures..."
           codesign -s - -f "${PKG}/libs/"*.dylib
-          codesign -s - -f "${PKG}/tilde"
+          codesign -s - -f "${PKG}/tilde.real"
 
+          # 7. Generate Documentation
           cat > "${PKG}/INSTALL.md" <<'MDEOF'
           # Tilde – macOS Standalone Binary
-
-          ## Description
-          This is a self-contained macOS build of the Tilde text editor.
-          It includes all necessary libraries (bundled in `libs/`).
-
+          
           ## Running Tilde
           1. Extract the tarball.
           2. Run `./tilde` from the terminal.
-
-          **Note on Gatekeeper:** If macOS blocks execution, run the following:
+          
+          This launcher script automatically configures the environment to use the bundled
+          libraries and data files.
+          
+          **Note on Gatekeeper:** If macOS blocks execution, run:
           ```bash
-          xattr -d com.apple.quarantine tilde
-          xattr -d com.apple.quarantine libs/*.dylib
+          xattr -d com.apple.quarantine tilde tilde.real libs/*.dylib
           ```
-
+          
           ## Support
           This build supports both Intel and Apple Silicon (depending on which package you downloaded).
           MDEOF

@@ -1,0 +1,24 @@
+diff --git a/src/option.cc b/src/option.cc
+index 4d2a4ee..e703833 100644
+--- a/src/option.cc
++++ b/src/option.cc
+@@ -118,10 +118,17 @@ static void read_config(std::unique_ptr<FILE, fclose_deleter> config_file) {
+ 
+ static void read_base_config_file() {
+   std::unique_ptr<FILE, fclose_deleter> config_file;
++  const char *datadir = getenv("TILDE_DATADIR");
++  if (datadir == nullptr) {
++    datadir = DATADIR;
++  }
++
++  std::string full_path = std::string(datadir) + "/base.config";
+ 
+-  config_file.reset(fopen(DATADIR "/base.config", "r"));
++  config_file.reset(fopen(full_path.c_str(), "r"));
+   if (config_file == nullptr) {
+-    lprintf("Failed to open file: %s %m\n", DATADIR "/base.config");
++    lprintf("Failed to open file: %s %m (DATADIR: %s, TILDE_DATADIR: %s)\n", full_path.c_str(),
++            DATADIR, getenv("TILDE_DATADIR") ? getenv("TILDE_DATADIR") : "unset");
+     return;
+   }
+ 

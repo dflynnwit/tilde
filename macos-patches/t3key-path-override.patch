@@ -1,0 +1,17 @@
+diff --git a/src/key.c b/src/key.c
+index 13b55f4..dc92903 100644
+--- a/src/key.c
++++ b/src/key.c
+@@ -202,7 +202,11 @@ static size_t parse_escapes(char *string) {
+ }
+ 
+ static t3_config_t *load_map_config(const char *term, int *error) {
+-  const char *path[3] = {NULL, DB_DIRECTORY, NULL};
++  const char *db_dir = getenv("T3KEY_DATABASE_PATH");
++  if (db_dir == NULL) {
++    db_dir = DB_DIRECTORY;
++  }
++  const char *path[3] = {NULL, db_dir, NULL};
+   char *xdg_path = NULL;
+   t3_config_error_t config_error;
+   t3_config_t *map_config = NULL;

@@ -49,16 +49,27 @@ done
 
 echo "==== Applying macOS Compatibility Patches ===="
 export PATCHES_DIR="$DIR/macos-patches"
-for repo in makesys transcript t3window t3widget t3key t3config; do
+for repo in makesys transcript t3window t3widget t3key t3config t3highlight tilde; do
     echo "--> Patching $repo..."
-    cd "$PARENT_DIR/$repo"
-    # Reset local modifications if any before applying
-    git checkout -- .
-    if [ -f "$PATCHES_DIR/${repo}.patch" ]; then
-        git apply "$PATCHES_DIR/${repo}.patch"
+    if [ "$repo" == "tilde" ]; then
+        cd "$DIR"
+        git checkout -- .
     else
-        echo "Warning: No patch file found for $repo"
+        cd "$PARENT_DIR/$repo"
+        # Reset local modifications if any before applying
+        git checkout -- .
     fi
+    # Apply any patches starting with the repo name (e.g. t3key.patch, t3key-path-override.patch)
+    for p in "$PATCHES_DIR/${repo}"*.patch; do
+        if [ -f "$p" ]; then
+            echo "    Applying $(basename "$p")..."
+            if [ "$repo" == "tilde" ]; then
+                git apply "$p" || true # Source relative patches
+            else
+                git apply "$p"
+            fi
+        fi
+    done
 done
 
 echo "==== Building Tilde ===="
