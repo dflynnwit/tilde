@@ -85,63 +85,68 @@ jobs:
           VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
           ARCH=$(uname -m)
           PKG="tilde-${VERSION}-macos-${ARCH}"
-          mkdir -p "${PKG}"
+          mkdir -p "${PKG}/libs"
 
           cp src/.objects/edit "${PKG}/tilde"
 
-          # Create a libs directory and bundle companion libraries
-          mkdir -p "${PKG}/libs"
-          cp ../transcript/src/.libs/libtranscript.0.dylib "${PKG}/libs/"
-          cp ../t3config/src/.libs/libt3config.0.dylib "${PKG}/libs/"
-          cp ../t3key/src/.libs/libt3key.0.dylib "${PKG}/libs/"
-          cp ../t3window/src/.libs/libt3window.0.dylib "${PKG}/libs/"
-          cp ../t3widget/src/.libs/libt3widget.0.dylib "${PKG}/libs/"
-          cp ../t3highlight/src/.libs/libt3highlight.0.dylib "${PKG}/libs/"
+          # Bundle all 6 companion libraries
+          LIBS="libtranscript libt3config libt3key libt3window libt3widget libt3highlight"
+          for lib in $LIBS; do
+            # The libs have versioned names like libt3config.0.dylib
+            cp ../*/src/.libs/${lib}.0.dylib "${PKG}/libs/"
+          done
 
-          # Fix library linkage to use @executable_path/libs/ so it's portable
-          install_name_tool -change /usr/lib/libtranscript.0.dylib @executable_path/libs/libtranscript.0.dylib "${PKG}/tilde"
-          install_name_tool -change /usr/lib/libt3config.0.dylib @executable_path/libs/libt3config.0.dylib "${PKG}/tilde"
-          install_name_tool -change /usr/lib/libt3key.0.dylib @executable_path/libs/libt3key.0.dylib "${PKG}/tilde"
-          install_name_tool -change /usr/lib/libt3window.0.dylib @executable_path/libs/libt3window.0.dylib "${PKG}/tilde"
-          install_name_tool -change /usr/lib/libt3widget.0.dylib @executable_path/libs/libt3widget.0.dylib "${PKG}/tilde"
-          install_name_tool -change /usr/lib/libt3highlight.0.dylib @executable_path/libs/libt3highlight.0.dylib "${PKG}/tilde"
+          # Bundle shared dependencies from Homebrew to make it truly standalone
+          BREW=$(brew --prefix)
+          cp "${BREW}/opt/libunistring/lib/libunistring.5.dylib" "${PKG}/libs/"
+          cp "${BREW}/opt/pcre2/lib/libpcre2-8.0.dylib" "${PKG}/libs/"
 
-          # Ad-hoc sign everything to bypass Gatekeeper locally
+          # --- Linkage Fix Step 1: Fix the main binary's references ---
+          for libName in libtranscript.0.dylib libt3config.0.dylib libt3key.0.dylib libt3window.0.dylib libt3widget.0.dylib libt3highlight.0.dylib; do
+             install_name_tool -change "/usr/lib/${libName}" "@executable_path/libs/${libName}" "${PKG}/tilde"
+          done
+
+          # --- Linkage Fix Step 2: Fix the dylibs' OWN internal references to each other ---
+          for targetLib in "${PKG}/libs/"*.dylib; do
+            for neighbor in libtranscript.0.dylib libt3config.0.dylib libt3key.0.dylib libt3window.0.dylib libt3widget.0.dylib libt3highlight.0.dylib; do
+              install_name_tool -change "/usr/lib/${neighbor}" "@loader_path/${neighbor}" "${targetLib}"
+            done
+            # Also fix references to the bundled Homebrew libs
+            install_name_tool -change "${BREW}/opt/libunistring/lib/libunistring.5.dylib" "@loader_path/libunistring.5.dylib" "${targetLib}"
+            install_name_tool -change "${BREW}/opt/pcre2/lib/libpcre2-8.0.dylib" "@loader_path/libpcre2-8.0.dylib" "${targetLib}"
+            # Ensure the dylib identifies itself by its relative path
+            libBase=$(basename "$targetLib")
+            install_name_tool -id "@loader_path/${libBase}" "${targetLib}"
+          done
+
+          # --- Linkage Fix Step 3: Fix Homebrew refs in the main binary too ---
+          install_name_tool -change "${BREW}/opt/libunistring/lib/libunistring.5.dylib" "@executable_path/libs/libunistring.5.dylib" "${PKG}/tilde"
+          install_name_tool -change "${BREW}/opt/pcre2/lib/libpcre2-8.0.dylib" "@executable_path/libs/libpcre2-8.0.dylib" "${PKG}/tilde"
+
+          # Ad-hoc sign everything to satisfy macOS Gatekeeper
+          echo "--> Applying ad-hoc signatures..."
           codesign -s - -f "${PKG}/libs/"*.dylib
           codesign -s - -f "${PKG}/tilde"
 
           cat > "${PKG}/INSTALL.md" <<'MDEOF'
           # Tilde – macOS Standalone Binary
 
-          ## Runtime requirements
-
-          Install the following via [Homebrew](https://brew.sh):
-
-          ```
-          brew install ncurses libunistring pcre2
-          ```
+          ## Description
+          This is a self-contained macOS build of the Tilde text editor.
+          It includes all necessary libraries (bundled in `libs/`).
 
           ## Running Tilde
+          1. Extract the tarball.
+          2. Run `./tilde` from the terminal.
 
-          This version is pre-bundled with its companion libraries.
-          You can run it directly:
-
+          **Note on Gatekeeper:** If macOS blocks execution, run the following:
+          ```bash
+          xattr -d com.apple.quarantine tilde
+          xattr -d com.apple.quarantine libs/*.dylib
           ```
-          ./tilde [file ...]
-          ```
 
-          If macOS Gatekeeper blocks it, run:
-          `xattr -d com.apple.quarantine tilde`
-          `xattr -d com.apple.quarantine libs/*.dylib`
-
-          Key bindings (Ctrl = Control, Alt = Meta/Option):
-          - **Alt-F**  File menu
-          - **Ctrl-S** Save
-          - **Ctrl-O** Open file
-          - **Ctrl-Q** Quit
-          - **Ctrl-C / Ctrl-V** Copy / Paste
-          - **Ctrl-Z / Ctrl-Y** Undo / Redo
-          - **Ctrl-F** Find
+          ## Support
+          This build supports both Intel and Apple Silicon (depending on which package you downloaded).
           MDEOF
 
           tar -czf "${PKG}.tar.gz" "${PKG}/"
@@ -154,7 +159,6 @@ jobs:
           name: tilde-macos-${{ matrix.arch_label }}
           path: tilde-*-macos-*.tar.gz
           if-no-files-found: error
-          # Keep artifacts for 90 days (GitHub default)
 
       # ── 11. Attach to GitHub Release (only on version tags) ─────────────────
       - name: Attach binary to GitHub Release
