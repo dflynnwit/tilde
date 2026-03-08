@@ -37,50 +37,7 @@ jobs:
           # version string embedded in the packaged binary name.
           fetch-depth: 0
 
-      # ── 2. System dependencies via Homebrew ─────────────────────────────────
-      - name: Install Homebrew dependencies
-        run: |
-          brew install \
-            flex \
-            gettext \
-            ncurses \
-            pcre2 \
-            libunistring \
-            libtool \
-            pkg-config
-
-      # ── 3. Expose keg-only Homebrew tools and set build flags ───────────────
-      - name: Configure build environment
-        run: |
-          BREW=$(brew --prefix)
-
-          # flex and gettext are keg-only; add their bin dirs to PATH
-          echo "$(brew --prefix flex)/bin"    >> "$GITHUB_PATH"
-          echo "$(brew --prefix gettext)/bin" >> "$GITHUB_PATH"
-          # GNU libtool is named glibtool on macOS to avoid shadowing the system
-          # tool; expose it as libtool/libtoolize as well
-          echo "$(brew --prefix libtool)/bin" >> "$GITHUB_PATH"
-
-          # pkg-config search path: global Homebrew prefix + keg-only packages
-          PKG_CONFIG_PATH="${BREW}/lib/pkgconfig:${BREW}/share/pkgconfig"
-          PKG_CONFIG_PATH="${PKG_CONFIG_PATH}:$(brew --prefix ncurses)/lib/pkgconfig"
-          PKG_CONFIG_PATH="${PKG_CONFIG_PATH}:$(brew --prefix pcre2)/lib/pkgconfig"
-          PKG_CONFIG_PATH="${PKG_CONFIG_PATH}:$(brew --prefix libunistring)/lib/pkgconfig"
-          echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
-
-          # Extra compiler/linker flags so headers and libs are found
-          echo "CPPFLAGS=-I${BREW}/include"  >> "$GITHUB_ENV"
-          echo "LDFLAGS=-L${BREW}/lib"       >> "$GITHUB_ENV"
-
-          # macOS ships with an Apple-flavoured libtool; GNU libtool binaries
-          # land as glibtool/glibtoolize. Create wrapper symlinks in a
-          # temporary directory on the PATH so configure scripts find them.
-          mkdir -p "$RUNNER_TEMP/libtool-shims"
-          ln -sf "$(brew --prefix libtool)/bin/glibtool"     "$RUNNER_TEMP/libtool-shims/libtool"
-          ln -sf "$(brew --prefix libtool)/bin/glibtoolize"  "$RUNNER_TEMP/libtool-shims/libtoolize"
-          echo "$RUNNER_TEMP/libtool-shims" >> "$GITHUB_PATH"
-
-      # ── 4. LLnextgen ────────────────────────────────────────────────────────
+      # ── 2. LLnextgen ────────────────────────────────────────────────────────
       # LLnextgen is a parser-generator required by the t3key library.
       # It is not available via Homebrew, so we build it from source.
       - name: Cache LLnextgen build
@@ -107,60 +64,16 @@ jobs:
       - name: Add LLnextgen to PATH
         run: echo "$RUNNER_TEMP/llnextgen-install/bin" >> "$GITHUB_PATH"
 
-      # ── 5. Clone companion repositories ─────────────────────────────────────
-      # The tilde build system expects all repos to be siblings in the same
-      # parent directory.  $GITHUB_WORKSPACE is <parent>/tilde, so we clone
-      # the rest into <parent>/.
-      - name: Clone companion repositories
-        working-directory: ${{ github.workspace }}/..
+      # ── 3. Build everything using automation script ──────────────────────────
+      - name: Build Tilde with automation script
         run: |
-          for repo in makesys transcript t3shared t3window t3widget t3key t3config t3highlight; do
-            if [ ! -d "${repo}" ]; then
-              git clone --depth=1 "https://github.com/gphalkes/${repo}.git"
-            fi
-          done
+          chmod +x ./mac_build.sh
+          ./mac_build.sh
 
-      # ── 6. Cache compiled dependencies ──────────────────────────────────────
-      # Use a cache key that includes the HEAD SHAs of all companion repos so
-      # the cache is invalidated when any dependency changes.
-      - name: Compute dependency cache key
-        working-directory: ${{ github.workspace }}/..
-        id: dep-cache-key
-        run: |
-          KEY=""
-          for repo in makesys transcript t3shared t3window t3widget t3key t3config t3highlight; do
-            SHA=$(git -C "${repo}" rev-parse HEAD 2>/dev/null || echo "unknown")
-            KEY="${KEY}-${repo}:${SHA}"
-          done
-          echo "key=deps-${{ matrix.arch_label }}-${KEY}" >> "$GITHUB_OUTPUT"
-
-      - name: Cache compiled dependencies
-        id: cache-deps
-        uses: actions/cache@v4
-        with:
-          path: |
-            ${{ github.workspace }}/../transcript/src/.objects
-            ${{ github.workspace }}/../transcript/src/.libs
-            ${{ github.workspace }}/../t3config/src/.objects
-            ${{ github.workspace }}/../t3config/src/.libs
-            ${{ github.workspace }}/../t3key/src/.objects
-            ${{ github.workspace }}/../t3key/src/.libs
-            ${{ github.workspace }}/../t3window/src/.objects
-            ${{ github.workspace }}/../t3window/src/.libs
-            ${{ github.workspace }}/../t3widget/src/.objects
-            ${{ github.workspace }}/../t3widget/src/.libs
-            ${{ github.workspace }}/../t3highlight/src/.objects
-            ${{ github.workspace }}/../t3highlight/src/.libs
-          key: ${{ steps.dep-cache-key.outputs.key }}
-
-      # ── 7. Build everything ──────────────────────────────────────────────────
-      - name: Build all packages
-        working-directory: ${{ github.workspace }}/..
-        run: ./t3shared/doall --skip-non-source --stop-on-error make -C src
-
-      # ── 8. Smoke-test the binary ─────────────────────────────────────────────
+      # ── 4. Smoke-test the binary ─────────────────────────────────────────────
       - name: Verify binary runs
         run: |
+          export DYLD_LIBRARY_PATH="${PWD}/../transcript/src/.libs:${PWD}/../t3config/src/.libs:${PWD}/../t3key/src/.libs:${PWD}/../t3window/src/.libs:${PWD}/../t3widget/src/.libs:${PWD}/../t3highlight/src/.libs:$DYLD_LIBRARY_PATH"
           file src/.objects/edit
           # --version / --help should exit cleanly (exit 0 or 1 are both fine
           # for a terminal editor; we just want to confirm it executes)
