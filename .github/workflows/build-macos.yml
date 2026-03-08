@@ -137,12 +137,18 @@ jobs:
             install_name_tool -id "@loader_path/${libBase}" "${targetLib}"
           done
 
+          # Fix Linkage for transcript modules (.ltc bundles) pointing back to libtranscript
+          for ltcFile in "${PKG}/data/transcript/"*.ltc; do
+            install_name_tool -change "/usr/lib/libtranscript.0.dylib" "@loader_path/../../libs/libtranscript.0.dylib" "${ltcFile}"
+          done
+
           install_name_tool -change "${BREW}/opt/libunistring/lib/libunistring.5.dylib" "@executable_path/libs/libunistring.5.dylib" "${PKG}/tilde.real"
           install_name_tool -change "${BREW}/opt/pcre2/lib/libpcre2-8.0.dylib" "@executable_path/libs/libpcre2-8.0.dylib" "${PKG}/tilde.real"
 
           # 6. Ad-hoc sign everything
           echo "--> Applying ad-hoc signatures..."
           codesign -s - -f "${PKG}/libs/"*.dylib
+          codesign -s - -f "${PKG}/data/transcript/"*.ltc
           codesign -s - -f "${PKG}/tilde.real"
 
           # 7. Generate Documentation
