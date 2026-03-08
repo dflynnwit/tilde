@@ -123,6 +123,9 @@ jobs:
           install_name_tool -change "${BREW}/opt/libunistring/lib/libunistring.5.dylib" "@executable_path/libs/libunistring.5.dylib" "${PKG}/tilde"
           install_name_tool -change "${BREW}/opt/pcre2/lib/libpcre2-8.0.dylib" "@executable_path/libs/libpcre2-8.0.dylib" "${PKG}/tilde"
 
+          # Ensure we have write permissions on everything (brew libs can be read-only)
+          chmod -R 755 "${PKG}"
+
           # Ad-hoc sign everything to satisfy macOS Gatekeeper
           echo "--> Applying ad-hoc signatures..."
           codesign -s - -f "${PKG}/libs/"*.dylib
