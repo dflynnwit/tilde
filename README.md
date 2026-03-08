@@ -40,6 +40,25 @@ tar xzf tilde-*-macos-*.tar.gz
 ./tilde-*-macos-*/tilde [file ...]
 ```
 
+### Build from source on macOS
+
+If you want to build tilde yourself (e.g. to pick up the latest changes),
+use the included helper script. It handles everything: installing dependencies,
+downloading LLnextgen, cloning the companion repositories, and building.
+
+```bash
+git clone https://github.com/dflynnwit/tilde.git
+cd tilde
+bash build-macos.sh
+```
+
+The compiled binary will be at `src/.objects/edit`. You can symlink it for
+convenience:
+
+```bash
+sudo ln -sf "$PWD/src/.objects/edit" /usr/local/bin/tilde
+```
+
 ### Linux / other platforms
 
 The easiest way to install Tilde is by using the repositories from the Tilde
@@ -69,8 +88,12 @@ or building Tilde:
 
 To help developing Tilde, you will need to build Tilde from the git
 repositories. The repositories assume that all parts of Tilde, i.e. Tilde
-itself and its support libraries, are built from the git repositories. Please
-follow the steps below to build Tilde from the git repositories:
+itself and its support libraries, are built from the git repositories.
+
+**On macOS**, the easiest way is to use the included helper script (see the
+[Build from source on macOS](#build-from-source-on-macos) section above).
+
+**On Linux**, please follow the steps below:
 
 1. Install the dependencies of Tilde from the system libraries. On a typical
    Debian/Ubuntu system this would include (packages for OpenSUSE and Fedora
@@ -89,20 +112,18 @@ follow the steps below to build Tilde from the git repositories:
    * LLnextgen (available [here](https://os.ghalkes.nl/LLnextgen/download.html))
    * clang (unless building using COMPILER=gcc)
 
-   On macOS, install dependencies via [Homebrew](https://brew.sh):
-   ```bash
-   brew install flex gettext ncurses pcre2 libunistring pkg-config libtool
-   ```
-   Note: `libgpm-dev`, `libacl1-dev`, `libattr1-dev` are Linux-only and not
-   required on macOS. LLnextgen must still be built from source.
-
-2. Clone the repositories:
+2. Clone **all** repositories into the same parent directory:
 ```bash
+mkdir tilde-src && cd tilde-src
 for i in makesys transcript t3shared t3window t3widget t3key t3config t3highlight tilde ; do
     git clone https://github.com/gphalkes/$i.git
 done
 ```
-3. Build all packages: `./t3shared/doall --skip-non-source --stop-on-error make -C src`
+3. Build all packages:
+```bash
+cd tilde-src
+./t3shared/doall --skip-non-source --stop-on-error make -C src
+```
 
 Once the build is complete, `tilde/src/.objects/edit` is the newly compiled
 tilde. If the [termdebug](https://os.ghalkes.nl/termdebug.html) suite of tools

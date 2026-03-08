@@ -43,6 +43,7 @@ jobs:
           brew install \
             flex \
             gettext \
+            gnu-sed \
             ncurses \
             pcre2 \
             libunistring \
@@ -60,6 +61,9 @@ jobs:
           # GNU libtool is named glibtool on macOS to avoid shadowing the system
           # tool; expose it as libtool/libtoolize as well
           echo "$(brew --prefix libtool)/bin" >> "$GITHUB_PATH"
+          # GNU sed (Homebrew) replaces BSD sed so that makesys/rules.mk's
+          # `sed -i -r` (GNU-only flags) works correctly on macOS
+          echo "$(brew --prefix gnu-sed)/libexec/gnubin" >> "$GITHUB_PATH"
 
           # pkg-config search path: global Homebrew prefix + keg-only packages
           PKG_CONFIG_PATH="${BREW}/lib/pkgconfig:${BREW}/share/pkgconfig"
@@ -156,7 +160,32 @@ jobs:
       # ── 7. Build everything ──────────────────────────────────────────────────
       - name: Build all packages
         working-directory: ${{ github.workspace }}/..
-        run: ./t3shared/doall --skip-non-source --stop-on-error make -C src
+        run: |
+          # makesys/rules.mk uses two GNU ld flags that the Apple linker
+          # (Xcode ≤ 14, macOS ≤ 13) does not understand.  Create thin
+          # clang/clang++ wrappers that translate them on the fly:
+          #   -Wl,--no-undefined  →  -Wl,-undefined,error
+          #   -Wl,-rpath=<p>      →  -Wl,-rpath,<p>
+          WRAPPERS="${RUNNER_TEMP:-$(mktemp -d)}/cc-wrappers"
+          mkdir -p "$WRAPPERS"
+          for CMD in clang clang++; do
+            REAL=$(xcrun -f "$CMD")
+            cat > "$WRAPPERS/$CMD" <<END_WRAPPER
+          #!/usr/bin/env bash
+          NEWARGS=()
+          for arg in "\$@"; do
+            case "\$arg" in
+              -Wl,--no-undefined) NEWARGS+=("-Wl,-undefined,error") ;;
+              -Wl,-rpath=*)       NEWARGS+=("-Wl,-rpath,\${arg#-Wl,-rpath=}") ;;
+              *)                  NEWARGS+=("\$arg") ;;
+            esac
+          done
+          exec "$REAL" "\${NEWARGS[@]}"
+          END_WRAPPER
+            chmod +x "$WRAPPERS/$CMD"
+          done
+          export PATH="$WRAPPERS:$PATH"
+          ./t3shared/doall --skip-non-source --stop-on-error make -C src
 
       # ── 8. Smoke-test the binary ─────────────────────────────────────────────
       - name: Verify binary runs
