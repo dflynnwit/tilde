@@ -116,7 +116,9 @@ jobs:
 
           # 4. Bundle Data Files
           cp src/base.config "${PKG}/data/"
-          find ../transcript/src -name "*.ltc" -exec cp {} "${PKG}/data/transcript/" \;
+          # Copy ALL ltc files into a FLAT directory (both modules/ and tables/ subdirs)
+          find ../transcript/src/modules/.libs -name "*.ltc" -exec cp {} "${PKG}/data/transcript/" \;
+          find ../transcript/src/tables/.libs  -name "*.ltc" -exec cp {} "${PKG}/data/transcript/" \;
           cp ../t3key/src/database/* "${PKG}/data/t3key/"
 
           # Ensure everything is writable for install_name_tool
@@ -137,7 +139,8 @@ jobs:
             install_name_tool -id "@loader_path/${libBase}" "${targetLib}"
           done
 
-          # Fix Linkage for transcript modules (.ltc bundles) pointing back to libtranscript
+          # Fix Linkage for ALL transcript ltc bundles - they are now in data/transcript/ (flat)
+          # @loader_path for a .ltc in data/transcript/ points: data/transcript/../../libs/ = libs/
           for ltcFile in "${PKG}/data/transcript/"*.ltc; do
             install_name_tool -change "/usr/lib/libtranscript.0.dylib" "@loader_path/../../libs/libtranscript.0.dylib" "${ltcFile}"
           done
