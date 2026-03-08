@@ -69,6 +69,22 @@ export DYLD_LIBRARY_PATH="$PARENT_DIR/transcript/src/.libs:$PARENT_DIR/t3config/
 
 ../t3shared/doall make -C src
 
+echo "==== Ad-hoc Code Signing ===="
+# On macOS (especially Apple Silicon), locally built binaries and dylibs
+# often need to be ad-hoc signed to pass Gatekeeper checks.
+echo "--> Signing main executable..."
+if [ -f "src/.objects/edit" ]; then
+    codesign -s - -f "src/.objects/edit"
+fi
+
+echo "--> Signing companion libraries..."
+# Only sign dylibs within our specific companion projects to avoid scanning the whole home dir
+for repo in transcript t3config t3key t3window t3widget t3highlight; do
+    if [ -d "$PARENT_DIR/$repo/src/.libs" ]; then
+        find "$PARENT_DIR/$repo/src/.libs" -name "*.dylib" -exec codesign -s - -f {} +
+    fi
+done
+
 echo "==== Build Complete! ===="
 echo "You can test the binary at:"
 echo "  cd src && .objects/edit"
