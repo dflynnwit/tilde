@@ -1,0 +1,26 @@
+diff --git a/src/Makefile b/src/Makefile
+index a19444b..8867df6 100644
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -38,7 +38,7 @@ CFLAGS += -D_T3_WINDOW_INTERNAL
+ CFLAGS += -DHAS_WINSIZE_IOCTL
+ CFLAGS += -DHAS_SELECT_H
+ CFLAGS += -DHAS_STRDUP
+-CFLAGS += -DHAS_TIOCLINUX -DHAS_KDGKBENT
++CFLAGS += -I../..
+ 
+ test: | libt3window.la
+ 
+diff --git a/src/terminal.c b/src/terminal.c
+index 2bae9d1..3f71eaf 100644
+--- a/src/terminal.c
++++ b/src/terminal.c
+@@ -22,7 +22,7 @@
+ #if defined(HAS_WINSIZE_IOCTL) || defined(HAS_SIZE_IOCTL) || defined(HAS_TIOCLINUX)
+ #include <sys/ioctl.h>
+ #endif
+-#ifdef HAS_TIOCLINUX
++#if defined(HAS_TIOCLINUX) && defined(__linux__)
+ #include <linux/keyboard.h>
+ #include <linux/tiocl.h>
+ #endif

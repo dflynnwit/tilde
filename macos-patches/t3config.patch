@@ -1,0 +1,26 @@
+diff --git a/src/Makefile b/src/Makefile
+index 14d3344..2503015 100644
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -33,7 +33,7 @@ T3NAME := config
+ include ../../t3shared/rules.mk
+ include ../../t3shared/rules-base.mk
+ 
+-CFLAGS += -I.objects
++CFLAGS += -I.objects -I../..
+ CFLAGS += -DHAS_STRDUP
+ CFLAGS += -DHAS_USELOCALE
+ CFLAGS += -DUSE_GETTEXT
+diff --git a/src/util.c b/src/util.c
+index 098d5c3..77a7fbd 100644
+--- a/src/util.c
++++ b/src/util.c
+@@ -16,7 +16,7 @@
+ #include <math.h>
+ #include <stdlib.h>
+ #include <string.h>
+-#ifdef USE_XLOCALE_H
++#if defined(USE_XLOCALE_H) || defined(__APPLE__)
+ #include <xlocale.h>
+ #endif
+ #include "util.h"

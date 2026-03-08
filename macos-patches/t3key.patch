@@ -1,0 +1,13 @@
+diff --git a/src/Makefile b/src/Makefile
+index bfedab6..ea0a9fb 100644
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -42,7 +42,7 @@ utils: | libt3key.la
+ 	@$(MAKE) -C ../src.util $(_VERBOSE_PRINT)
+ 
+ updatedblinks: utils
+-	@for i in database/* ; do ../src.util/t3keyc/t3keyc -l $$i ; done
++	@for i in database/* ; do DYLD_LIBRARY_PATH=../../t3config/src/.libs ../src.util/t3keyc/t3keyc -l $$i ; done
+ 
+ clang-format:
+ 	clang-format -i *.c *.h

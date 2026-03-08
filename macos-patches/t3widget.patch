@@ -1,0 +1,57 @@
+diff --git a/src/Makefile b/src/Makefile
+index c89f41b..7f8b08b 100644
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -72,7 +72,7 @@ SOURCES.libt3widget.la := \
+ 
+ SOURCES.x11.la := x11.cc
+ 
+-CXXLTTARGETS := libt3widget.la x11.la
++CXXLTTARGETS := libt3widget.la
+ EXTRATARGETS := .clang-tidy-opts
+ #================================================#
+ # NO RULES SHOULD BE DEFINED BEFORE THIS INCLUDE #
+@@ -87,7 +87,7 @@ include ../../t3shared/rules-base.mk
+ CXXFLAGS += -D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS
+ CXXFLAGS += -D_T3_WIDGET_DEBUG
+ CXXFLAGS += -D_T3_WIDGET_INTERNAL
+-CXXFLAGS += -DHAS_STRDUP
++CXXFLAGS += -DHAS_STRDUP -I../..
+ CXXFLAGS += -pthread
+ ifeq ($(PCRE_COMPAT), 0)
+ CXXFLAGS += `pkg-config --cflags libpcre2-8`
+@@ -97,9 +97,9 @@ endif
+ CXXFLAGS += -std=c++11
+ # Set default visibility to hidden, so we find out when we forgot to export something
+ CXXFLAGS += -fvisibility=hidden
+-CXXFLAGS += -DWITH_X11
+-CXXFLAGS += -DX11_MOD_NAME=\"$(CURDIR)/.libs/x11.mod\"
+-CXXFLAGS += -DHAS_GPM
++# CXXFLAGS += -DWITH_X11
++# CXXFLAGS += -DX11_MOD_NAME=\"$(CURDIR)/.libs/x11.mod\"
++# CXXFLAGS += -DHAS_GPM
+ #~ CXXFLAGS += -DHAS_VECTOR_SHRINK_TO_FIT
+ 
+ LDLIBS.libt3widget.la += $(T3LDFLAGS.t3window) -lt3window
+@@ -111,7 +111,7 @@ else
+ LDLIBS.libt3widget.la += `pkg-config --libs libpcre`
+ endif
+ LDLIBS.libt3widget.la += -lunistring
+-LDLIBS.libt3widget.la += -lgpm
++# LDLIBS.libt3widget.la += -lgpm
+ LDLIBS.libt3widget.la += -lm
+ 
+ CXXFLAGS += -DHAS_DLFCN
+diff --git a/src/widgets/menu.cc b/src/widgets/menu.cc
+index 785c076..7658fa2 100644
+--- a/src/widgets/menu.cc
++++ b/src/widgets/menu.cc
+@@ -11,7 +11,7 @@
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+-#include <ext/alloc_traits.h>
++
+ #include <memory>
+ #include <type_traits>
+ #include <utility>

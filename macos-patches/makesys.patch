@@ -1,0 +1,30 @@
+diff --git a/rules.mk b/rules.mk
+index ca8e4ac..795d379 100644
+--- a/rules.mk
++++ b/rules.mk
+@@ -96,7 +96,13 @@ _GENDIR_ECHO = [ -d `dirname '$(2)'`/$(1) ] || mkdir -p `dirname '$(2)'`/$(1)
+ GENLIBDIR = $(call _GENDIR_ECHO,.libs,$@)
+ 
+ MKPATH := $(dir $(lastword $(MAKEFILE_LIST)))
++_UNAME_S_RULES := $(shell uname -s)
++ifeq ($(_UNAME_S_RULES),Darwin)
++L = $(foreach d,$(1),-L$(d) -Wl,-rpath -Wl,$(CURDIR)/$(d))
++else
+ L = $(foreach d,$(1),-L$(d) -Wl,-rpath=$(CURDIR)/$(d))
++endif
++
+ 
+ BUILDVERSION ?= debug
+ LTBUILD ?= libtool
+@@ -143,7 +149,10 @@ else
+ endif
+ ifndef ASAN
+ ifndef MSAN
+-	LDFLAGS := -Wl,--no-undefined
++	UNAME_S := $(shell uname -s)
++	ifneq ($(UNAME_S),Darwin)
++		LDFLAGS := -Wl,--no-undefined
++	endif
+ endif
+ endif
+ # Compiler specific settings. G++ requires output filtering, and Clang can do without
