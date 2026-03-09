@@ -82,7 +82,7 @@ jobs:
       # ── 9. Package the binary ────────────────────────────────────────────────
       - name: Package binary
         run: |
-          VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+          VERSION=$(git describe --tags --always 2>/dev/null || echo "dev")
           ARCH=$(uname -m)
           PKG="tilde-${VERSION}-macos-${ARCH}"
           mkdir -p "${PKG}/libs"
